@@ -17,6 +17,10 @@ class RefreshTokenException(Exception):
 
 class Token:
     def __init__(self, config):
+        self.proxies = {
+                "http": "91.77.162.117",
+                "https": "169.57.1.85",
+            }
         self._session = requests.Session()
         self._session.headers.update({'User-Agent': 'Mozilla/5.0 (X11; Linux ppc64le; rv:75.0) Gecko/20100101 Firefox/75.0'})       
         self.config = config
@@ -30,7 +34,14 @@ class Token:
             req = self._session.prepare_request(requests.Request('GET', self.url))
             logme.debug(f'Retrieving {req.url}')
             try:
-                r = self._session.send(req, allow_redirects=True, timeout=self._timeout)
+                r = self._session.send(
+                        req,
+                        allow_redirects=True,
+                        timeout=self._timeout,
+                        proxies=self.proxies,
+                        verify=False,
+                    )
+                
             except requests.exceptions.RequestException as exc:
                 if attempt < self._retries:
                     retrying = ', retrying'
