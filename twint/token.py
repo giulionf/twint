@@ -3,6 +3,7 @@ import time
 
 import requests
 import logging as logme
+from twint.proxy import Proxies
 
 
 class TokenExpiryException(Exception):
@@ -13,43 +14,48 @@ class TokenExpiryException(Exception):
 class RefreshTokenException(Exception):
     def __init__(self, msg):
         super().__init__(msg)
-        
+
 
 class Token:
     def __init__(self, config):
-        self.proxies = {
-                "http": "91.77.162.117",
-                "https": "169.57.1.85",
-            }
         self._session = requests.Session()
         self._session.headers.update({'User-Agent': 'Mozilla/5.0 (X11; Linux ppc64le; rv:75.0) Gecko/20100101 Firefox/75.0'})       
         self.config = config
         self._retries = 5
         self._timeout = 10
         self.url = 'https://twitter.com'
+        self.proxies = Proxies()
 
     def _request(self):
         for attempt in range(self._retries + 1):
             # The request is newly prepared on each retry because of potential cookie updates.
             req = self._session.prepare_request(requests.Request('GET', self.url))
             logme.debug(f'Retrieving {req.url}')
-            try:
-                r = self._session.send(
-                        req,
-                        allow_redirects=True,
-                        timeout=self._timeout,
-                        proxies=self.proxies,
-                        verify=False,
-                    )
-                
-            except requests.exceptions.RequestException as exc:
-                if attempt < self._retries:
-                    retrying = ', retrying'
-                    level = logme.WARNING
-                else:
-                    retrying = ''
-                    level = logme.ERROR
-                logme.log(level, f'Error retrieving {req.url}: {exc!r}{retrying}')
+
+            while True:
+                proxy = self.proxies.get()
+                try:
+                    r = self._session.send(
+                            req,
+                            allow_redirects=True,
+                            timeout=self._timeout,
+                            proxies=proxy,
+                            verify=False,
+                        )
+                    break
+                except requests.exceptions.RequestException as exc:
+                    if attempt < self._retries:
+                        retrying = ', retrying'
+                        level = logme.WARNING
+                    else:
+                        retrying = ''
+                        level = logme.ERROR
+                    logme.log(level, f'Error retrieving {req.url}: {exc!r}{retrying}')
+                except requests.exceptions.ProxyError:
+                    self.proxies.remove()
+                except requests.exceptions.ConnectTimeout:
+                    self.proxies.remove()
+
             else:
                 success, msg = (True, None)
                 msg = f': {msg}' if msg else ''
